@@ -7,12 +7,12 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.Map;
-import me.nightletter.payment.dto.request.PaymentResponse;
+import me.nightletter.payment.dto.request.PaymentReadyResponse;
+import me.nightletter.payment.dto.request.PaymentReadyRequest;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.RequestEntity;
-import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
@@ -24,35 +24,37 @@ public class PaymentApiTemplate {
 	@Value( "${payment.access}" )
 	private String accessKey;
 
-	public Map executeReady( PaymentResponse paymentResponse ) {
+	public PaymentReadyResponse executeReady( PaymentReadyRequest paymentReadyRequest ) {
 		RestTemplate restTemplate = new RestTemplate();
-		RequestEntity requestEntity = new RequestEntity<>( paymentResponse, setEximbayRequestHeader(), POST, URI.create( ready ) );
+		RequestEntity requestEntity = new RequestEntity<>( paymentReadyRequest, setEximbayRequestHeader(), POST, URI.create( ready ) );
 
-		ResponseEntity<Map> result = restTemplate.exchange( requestEntity, Map.class );
-		return result.getBody();
+		PaymentReadyResponse result = restTemplate.exchange( requestEntity, PaymentReadyResponse.class )
+			.getBody();
+
+		return result;
 	}
 
 	private HttpHeaders setEximbayRequestHeader() {
 		//        키 맨끝 + : , 참고 : https://developer.eximbay.com/payment_linkage/preparing-payment.html
 		String encodeTarget = accessKey + ":";
-		String encodedApiKey = new String( Base64.getEncoder().encode(encodeTarget.getBytes()));
+		String encodedApiKey = new String( Base64.getEncoder().encode( encodeTarget.getBytes() ) );
 
 		HttpHeaders httpHeaders = new HttpHeaders();
-		httpHeaders.setBasicAuth(encodedApiKey);
-		httpHeaders.setContentType( MediaType.APPLICATION_JSON);
+		httpHeaders.setBasicAuth( encodedApiKey );
+		httpHeaders.setContentType( MediaType.APPLICATION_JSON );
 
 		return httpHeaders;
 	}
 
-	private String queryParamGenerator( Map<String, String> params) {
+	private String queryParamGenerator( Map<String, String> params ) {
 		StringBuilder queryStringBuilder = new StringBuilder();
-		for (Map.Entry<String, String> entry : params.entrySet()) {
-			if (queryStringBuilder.length() > 0) {
-				queryStringBuilder.append("&");
+		for ( Map.Entry<String, String> entry : params.entrySet() ) {
+			if ( queryStringBuilder.length() > 0 ) {
+				queryStringBuilder.append( "&" );
 			}
-			queryStringBuilder.append( URLEncoder.encode(entry.getKey(), StandardCharsets.UTF_8));
-			queryStringBuilder.append("=");
-			queryStringBuilder.append(URLEncoder.encode(entry.getValue(), StandardCharsets.UTF_8));
+			queryStringBuilder.append( URLEncoder.encode( entry.getKey(), StandardCharsets.UTF_8 ) );
+			queryStringBuilder.append( "=" );
+			queryStringBuilder.append( URLEncoder.encode( entry.getValue(), StandardCharsets.UTF_8 ) );
 		}
 
 		return queryStringBuilder.toString();

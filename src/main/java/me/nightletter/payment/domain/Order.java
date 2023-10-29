@@ -12,6 +12,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.AccessLevel;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -36,10 +37,15 @@ public class Order {
 	private String transactionId;
 	private Integer totalPrice;
 
+	@Builder
 	public Order( String orderNumber, PaymentMethod paymentMethod, User user, int totalPrice ) {
 		this.orderNumber = orderNumber;
 		this.paymentMethod = paymentMethod;
 		this.user = user;
 		this.totalPrice = totalPrice;
+	}
+
+	public void confirm(String transactionId) {
+		this.transactionId = transactionId;
 	}
 }

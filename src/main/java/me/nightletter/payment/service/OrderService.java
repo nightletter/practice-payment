@@ -1,14 +1,17 @@
 package me.nightletter.payment.service;
 
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import me.nightletter.payment.domain.Cart;
 import me.nightletter.payment.domain.Order;
 import me.nightletter.payment.domain.Payment;
+import me.nightletter.payment.domain.PaymentStatus;
 import me.nightletter.payment.domain.User;
 import me.nightletter.payment.dto.request.OrderRequest;
-import me.nightletter.payment.dto.request.PaymentResponse;
+import me.nightletter.payment.dto.request.PaymentConfirmRequest;
+import me.nightletter.payment.dto.request.PaymentReadyRequest;
+import me.nightletter.payment.dto.request.PaymentReadyResponse;
 import me.nightletter.payment.exception.ResourceNotFountException;
 import me.nightletter.payment.repository.CartRepository;
 import me.nightletter.payment.repository.OrderRepository;
@@ -36,7 +39,7 @@ public class OrderService {
 	@Value( "${host.url}" )
 	private String hostUrl;
 
-	public PaymentResponse create( OrderRequest orderRequest ) {
+	public PaymentReadyRequest create( OrderRequest orderRequest ) {
 
 		User findBuyer = userRepository.findById( orderRequest.getUserId() )
 			.orElseThrow( () -> new ResourceNotFountException( "user", orderRequest.getUserId() ) );
@@ -48,21 +51,66 @@ public class OrderService {
 			.mapToInt( cart -> cart.getProduct().getPrice() )
 			.sum();
 
-		Order savedOrder = orderRepository.save( new Order( orderNumberGenerator.generate( findBuyer.getUserId(), System.currentTimeMillis()), orderRequest.getPaymentMethod(), findBuyer, totalPrice ) );
+		Order builtOrder = Order.builder()
+			.orderNumber( orderNumberGenerator.generate( findBuyer.getUserId(), System.currentTimeMillis() ) )
+			.paymentMethod( orderRequest.getPaymentMethod() )
+			.user( findBuyer )
+			.totalPrice( totalPrice )
+			.build();
+
+		Order savedOrder = orderRepository.save( builtOrder );
+		List<Payment> savedPayments = new ArrayList<>();
+
 		findCarts.forEach( cart -> {
 			cart.getProduct().decrementStockQuantity( cart.getSaleQuantity() );
-			paymentRepository.save( Payment.create( savedOrder, cart.getProduct(), cart.getSaleQuantity(), cart.getProduct().getPrice() ) );
+			Payment savedPayment = paymentRepository.save( Payment.create( savedOrder, cart.getProduct(), cart.getSaleQuantity(), cart.getProduct().getPrice() ) );
+			savedPayments.add( savedPayment );
 		} );
 
-		PaymentResponse result = new PaymentResponse( mid, savedOrder, findBuyer, hostUrl );
+		PaymentReadyRequest result = new PaymentReadyRequest( mid, savedOrder, savedPayments, findBuyer, hostUrl );
+		PaymentReadyResponse readyResult = paymentApiTemplate.executeReady( result );
 
-		Map map = paymentApiTemplate.executeReady( result );
-		return null;
+		result.setFgkey( readyResult.getFgkey() );
+
+		return result;
+	}
+
+	@Transactional
+	public void confirm( PaymentConfirmRequest request ) {
+		Order findOrder = orderRepository.findByOrderNumber( request.getOrder_id() )
+			.orElseThrow( () -> new ResourceNotFountException( "order", request.getOrder_id() ) );
+
+		List<Payment> findPayments = paymentRepository.findByOrderId( findOrder.getOrderId() );
+
+		findOrder.confirm( request.getTransaction_id() );
+		findPayments.forEach( payment -> {
+			payment.confirm();
+		} );
 	}
 
 	private void cartValidation( List<Cart> carts ) {
 		if (carts.isEmpty()) {
 			throw new ResourceNotFountException();
 		}
+	}
+
+	public String verify( String orderNumber ) {
+		List<Payment> findPayments = paymentRepository.findByOrderNumber( orderNumber );
+
+		for ( Payment payment : findPayments ) {
+			if (payment.getPaymentStatus() == PaymentStatus.PEND) {
+				return PaymentStatus.PEND.name();
+			}
+
+			if (payment.getPaymentStatus() == PaymentStatus.SALE) {
+				return PaymentStatus.SALE.name();
+			}
+
+			if (payment.getPaymentStatus() == PaymentStatus.FAIL) {
+				return PaymentStatus.FAIL.name();
+			}
+		}
+
+		return PaymentStatus.FAIL.name();
 	}
 }

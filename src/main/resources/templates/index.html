@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <title>Title</title>
+</head>
+<script type="text/javascript" src="https://code.jquery.com/jquery-1.12.4.min.js"></script>
+<script type="text/javascript" src="https://api-test.eximbay.com/v1/javascriptSDK.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+<body>
+<button id="payment">payment</button>
+</body>
+<script>
+  const button = document.querySelector("#payment");
+
+  let popupWindow = null; // 팝업 창을 추적하기 위한 변수
+  let checkPopupInterval; // 팝업 상태를 확인하는 인터벌
+
+  // 팝업을 감지하기 위해 window.open 함수를 래핑
+  const originalWindowOpen = window.open;
+
+  // window.open 함수 덮어쓰기 (새 창이 열릴 때 호출되는 콜백 함수 추가)
+  window.open = function (url, name, specs, replace) {
+    // 새 창이 열릴 때 여기에 원하는 동작을 추가
+    console.log('팝업이 열림:', url);
+
+    // 이전 인터벌 중지
+    if (checkPopupInterval) {
+      clearInterval(checkPopupInterval);
+    }
+
+    // 원래 window.open 함수 호출 (새 창을 열게 됨)
+    popupWindow = originalWindowOpen.apply(this, arguments);
+
+    // 새로운 인터벌 시작
+    checkPopupInterval = setInterval(checkPopupStatus, 1000); // 1초마다 확인
+  }
+
+  let orderNumber;
+
+  button.addEventListener("click", (event) => {
+    axios.post('/api/order/create')
+    .then(res => {
+      orderNumber = res.data.payment.order_id
+      EXIMBAY.request_pay(res.data);
+    })
+    .catch(error => {
+      console.log(error);
+    })
+  });
+
+  function checkPopupStatus() {
+    if (popupWindow && popupWindow.closed) {
+      clearInterval(checkPopupInterval); // 인터벌 중지
+      popupWindow = null;
+
+      axios.get(`/api/order/${orderNumber}`)
+      .then(res => {
+        alert(res.data);
+      })
+      .catch(error => {
+        console.log(error);
+      })
+    }
+  }
+
+</script>
+</html>

@@ -59,4 +59,8 @@ public class Payment {
 			.price( price )
 			.build();
 	}
+
+	public void confirm() {
+		this.paymentStatus = PaymentStatus.SALE;
+	}
 }
